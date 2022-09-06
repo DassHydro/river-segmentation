@@ -7,8 +7,9 @@ Created on Wed Nov 24 10:08:26 2021
 """
 
 import argparse
-from rt_river_segmentation.segmentation_methods import *
+from rt_river_segmentation.denoising import hydraulic_filtering
 from rt_river_segmentation.load_and_process_data import *
+from rt_river_segmentation.segmentation_methods import *
 
 
 if __name__ == '__main__':
@@ -21,6 +22,8 @@ if __name__ == '__main__':
     parser.add_argument("-lambda", dest="lambda_c", type=float, nargs="+", default=1.0, help="Caracteristic length(s) for the segmentation (km)")
     parser.add_argument("-dx", type=int, default=10, help="Spacing to resample data (m)")
     parser.add_argument("-plot-file", dest="plot_file", type=str, default=None, help="Path to the plot file")
+    parser.add_argument("--denoising", action="store_true", 
+                        help="Activate hydraulic filtering prior to segmentation")
     parser.add_argument("--enable-width-max-curvature-points", dest="enable_width_max_curvature_points",
                         action="store_true", 
                         help="Enable maximum of curvature of W for segments definitions ('advanced' only)")
@@ -44,6 +47,19 @@ if __name__ == '__main__':
     Z = M_Z[time_index, :]
     W = W[time_index, :]
     Ah = Ah[time_index, :]
+    
+    if args.denoising:
+        
+        #--------------------------------------------------------------------------------------------------------------
+        # Use hydraulic based filtering method
+        #--------------------------------------------------------------------------------------------------------------
+
+        print("\n" + "-" * 80)
+        print("Hydraulic based filtering")
+        print("-" * 80)
+        Zfiltered = hydraulic_filtering(X, Z[::-1], x_direction="downstream") 
+        Z = Zfiltered[::-1]
+        print("-" * 80 + "\n")
     
     if len(args.data_files) == 1:
         
