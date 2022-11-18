@@ -76,8 +76,8 @@ def hydraulic_filtering(x, H, x_direction="downstream", mother="paul", param=4, 
                 inverse_slopes_count += 1
 
                 for j in range(i-dfilt+1, i+dfilt+2):
-                    #print("clear wave: (%i, %i)" % (min_scales[i0+j], i0+j))
-                    waves[0:index_scale+1, i0+j] = 0
+                    if i0+j >= 0 and i0+j < waves.shape[1]:
+                        waves[0:index_scale+1, i0+j] = 0
                    
         if plot_steps:
             S = np.real(waves) != 0

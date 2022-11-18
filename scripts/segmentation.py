@@ -73,9 +73,9 @@ if __name__ == '__main__':
         d2xZ_neg_list = []
         for lambda_c in lambda_c_list:
             if wavelet is None:
-                d2xZ_pos, d2xZ_neg, wavelet = segmentation_baseline(X, Z, Zb, lambda_c)
+                d2xZ_pos, d2xZ_neg, reaches_bounds, wavelet = segmentation_baseline(X, Z, Zb, lambda_c)
             else:
-                d2xZ_pos, d2xZ_neg, _ = segmentation_baseline(X, Z, Zb, lambda_c, wavelet)
+                d2xZ_pos, d2xZ_neg, reaches_bounds, _ = segmentation_baseline(X, Z, Zb, lambda_c, wavelet)
             d2xZ_pos_list.append(d2xZ_pos)
             d2xZ_neg_list.append(d2xZ_neg)
 
@@ -135,11 +135,11 @@ if __name__ == '__main__':
             if wavelet_Z is None:
                 results = segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, 
                                                 add_max_curvature_W=args.enable_width_max_curvature_points)
-                d2xZ_ZpWp, d2xZ_ZpWn, d2xZ_ZnWp, d2xZ_ZnWn, wavelet_Z, wavelet_W = results
+                d2xZ_ZpWp, d2xZ_ZpWn, d2xZ_ZnWp, d2xZ_ZnWn, reaches_bounds, wavelet_Z, wavelet_W = results
             else:
                 results = segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, wavelet_Z, wavelet_W,
                                                 add_max_curvature_W=args.enable_width_max_curvature_points)
-                d2xZ_ZpWp, d2xZ_ZpWn, d2xZ_ZnWp, d2xZ_ZnWn, _, _ = results
+                d2xZ_ZpWp, d2xZ_ZpWn, d2xZ_ZnWp, d2xZ_ZnWn, reaches_bounds, _, _ = results
             d2xZ_ZpWp_list.append(d2xZ_ZpWp)
             d2xZ_ZpWn_list.append(d2xZ_ZpWn)
             d2xZ_ZnWp_list.append(d2xZ_ZnWp)

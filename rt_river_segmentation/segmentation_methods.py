@@ -16,7 +16,7 @@ from .find_regional_peaks import *
 from .pyrscwt import cwt, icwt
 
 
-def segmentation_baseline(X, Z, Zb, lambda_c, wavelet=None, plot=False):
+def segmentation_baseline(X, Z, Zb, lambda_c, wavelet=None, min_length=None, plot=False):
     '''
     Segmentation of a given signal. The signal is first filtered using a continuous wavelet decomposition 
     (the wavelet is chosen automatically), then reconstructed. Its curvature is calculated at every abscissa, 
@@ -59,6 +59,10 @@ def segmentation_baseline(X, Z, Zb, lambda_c, wavelet=None, plot=False):
     else:
         wave_type, parameter = wavelet
     
+    print("\n" + "-" * 80)
+    print("Segmentation (baseline)")
+    print("-" * 80)
+
     # for fc in range(0, len(vect_freq_coup)):
     fc = 0
     
@@ -131,13 +135,13 @@ def segmentation_baseline(X, Z, Zb, lambda_c, wavelet=None, plot=False):
         if (np.isfinite(X_pos[i]) & np.isnan(X_pos[i+1])):
             x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_pos[i], X_neg[i+1]])
             z_inf = np.interp(x_inf, X, Z)
-            X_inflexion += [x_inf]
-            Z_inflexion += [z_inf]
+            X_inflexion.append(x_inf)
+            Z_inflexion.append(z_inf)
         elif (np.isfinite(X_neg[i]) & np.isnan(X_neg[i+1])):
             x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_neg[i], X_pos[i+1]])
             z_inf = np.interp(x_inf, X, Z)
-            X_inflexion += [x_inf]
-            Z_inflexion += [z_inf]
+            X_inflexion.append(x_inf)
+            Z_inflexion.append(z_inf)
     
     X_inflexion = np.asarray(X_inflexion)
     Z_inflexion = np.asarray(Z_inflexion)
@@ -146,7 +150,35 @@ def segmentation_baseline(X, Z, Zb, lambda_c, wavelet=None, plot=False):
     Z_regular = np.interp(X_regular, X, Z)
     
     # determine indices where there are peaks in curvature values
-    ind_pics_positifs, ind_pics_negatifs = find_regional_peaks(d2xZ_f, 1e-11)
+    val_min = np.nanmax(np.abs(d2xZ_f)) * 0.05
+    print("val_min=", val_min)
+    ind_pics_positifs, ind_pics_negatifs = find_regional_peaks(d2xZ_f, val_min, debug=False)
+    
+    if False:
+        fig, axes = plt.subplots(3, 1, sharex=True, figsize=(12, 12))
+        axes[0].plot(X_neg, M_neg, "r-")
+        axes[0].plot(X_pos, M_pos, "g-")
+        axes[0].plot(X[ind_pics_positifs], Z[ind_pics_positifs], 'r+')
+        axes[0].plot(X[ind_pics_negatifs], Z[ind_pics_negatifs], 'g+')
+        axes[0].plot(X_inflexion, Z_inflexion, 'b+')
+        axes[1].plot(X, dxZ_f)
+        axes[2].plot(X, d2xZ_f)
+        axes[2].plot(X[ind_pics_positifs], d2xZ_f[ind_pics_positifs], 'r+')
+        axes[2].plot(X[ind_pics_negatifs], d2xZ_f[ind_pics_negatifs], 'g+')
+        axes[0].plot(X_inflexion, Z_inflexion, 'b+')
+        for index in ind_pics_positifs:
+            axes[0].axvline(X[index], color="k", ls="--")
+            axes[2].axvline(X[index], color="k", ls="--")
+        for index in ind_pics_negatifs:
+            axes[0].axvline(X[index], color="gray", ls="--")
+            axes[2].axvline(X[index], color="gray", ls="--")
+        axes[2].axhline(0.0, color="b", ls="--")
+        axes[2].axhline(val_min, color="g", ls="--")
+        axes[2].axhline(-val_min, color="g", ls="--")
+        
+        plt.show()
+    
+    
     ind_pos_et_neg = np.concatenate((ind_pics_positifs, ind_pics_negatifs))
     indices = np.sort(ind_pos_et_neg)
     ind_sort = indices[((indices > 0) & (indices < len(X)))]
@@ -162,13 +194,27 @@ def segmentation_baseline(X, Z, Zb, lambda_c, wavelet=None, plot=False):
     seg1_no_nan = seg1_no_nan.astype("int")
     
     # Reaches S2 (extremums of curvature)
-    selected_X = np.take(X, seg1_no_nan)
-    reach_lengths = np.diff(selected_X)
+    reaches_X = np.take(X, seg1_no_nan)
+    
+    #reaches_X = np.concatenate((reaches_X, X_inflexion))
+    #reaches_X = np.sort(reaches_X)
+    
+    # Compute reaches lengths
+    reach_lengths = np.diff(reaches_X)
+    
+    if min_length is not None and len(reach_lengths) > 1:
+        if (np.any(reach_lengths < min_length)):
+            indices_to_remove = np.ravel(np.argwhere(reach_lengths < min_length))
+            if indices_to_remove[0] == 0:
+                indices_to_remove[0] = 1
+            reaches_X = np.delete(reaches_X, indices_to_remove)
+
+
     print("- lambda_c : %f" % lambda_c)
     #print(selected_X)
     print("  - reaches count : %i" % len(reach_lengths))
-    print("  - reaches lenghts : [%.3f - %.3f]" % (np.min(reach_lengths), np.max(reach_lengths)))
-    print("")
+    print("  - reaches lengths : [%.3f - %.3f]" % (np.min(reach_lengths), np.max(reach_lengths)))
+    print("-" * 80 + "\n")
     
     if plot:
         figure = plt.figure(figsize = (15, 10))
@@ -184,30 +230,32 @@ def segmentation_baseline(X, Z, Zb, lambda_c, wavelet=None, plot=False):
         plt.legend()
         plt.show()
         
-        # Zb SEGMENTATION
-        figure2 = plt.figure(figsize = (15, 10))
-        plt.plot(X/1000, Z, linewidth = 4, color = "r", label = "Inflexion points + curvature maxima")
-        plt.plot(selected_X/1000, selected_Z, "r.", markersize = 12)
-        plt.plot(X_inflexion/1000, Z_inflexion, "r.", markersize = 12)
-        plt.plot(X/1000, Z+5, linewidth = 4, color = "r", label = "Inflexion points only")
-        plt.plot(X_inflexion/1000, Z_inflexion+5, "r.", markersize = 12)
-        plt.plot(X/1000, Z+10, linewidth = 4, color = "r", label = "Curvature maxima only")
-        plt.plot(selected_X/1000, selected_Z+10, "r.", markersize = 12)
-        plt.plot(X/1000, Z+15, linewidth = 4, color = "r", label = "Constant reaches boudaries every 2km")
-        plt.plot(X_regular/1000, Z_regular+15, "r.", markersize = 12)
-        plt.xlim(0, np.max(X)/1000)
-        plt.ylim(60, 145)
-        plt.xlabel("xs (km)")
-        plt.ylabel("Z(m)")
-        plt.title(r"Different segmentations with $\lambda_c = $" + str(lambda_c/1000) + " km")
-        plt.legend()
-        plt.close(fig = figure2)
+        ## Zb SEGMENTATION
+        #figure2 = plt.figure(figsize = (15, 10))
+        #plt.plot(X/1000, Z, linewidth = 4, color = "r", label = "Inflexion points + curvature maxima")
+        #plt.plot(selected_X/1000, selected_Z, "r.", markersize = 12)
+        #plt.plot(X_inflexion/1000, Z_inflexion, "r.", markersize = 12)
+        #plt.plot(X/1000, Z+5, linewidth = 4, color = "r", label = "Inflexion points only")
+        #plt.plot(X_inflexion/1000, Z_inflexion+5, "r.", markersize = 12)
+        #plt.plot(X/1000, Z+10, linewidth = 4, color = "r", label = "Curvature maxima only")
+        #plt.plot(selected_X/1000, selected_Z+10, "r.", markersize = 12)
+        #plt.plot(X/1000, Z+15, linewidth = 4, color = "r", label = "Constant reaches boudaries every 2km")
+        #plt.plot(X_regular/1000, Z_regular+15, "r.", markersize = 12)
+        #plt.xlim(0, np.max(X)/1000)
+        #plt.ylim(60, 145)
+        #plt.xlabel("xs (km)")
+        #plt.ylabel("Z(m)")
+        #plt.title(r"Different segmentations with $\lambda_c = $" + str(lambda_c/1000) + " km")
+        #plt.legend()
+        #plt.show()
+        #plt.close(fig = figure2)
     
-    return d2xZ_pos, d2xZ_neg, (wave_type, parameter)
+    return d2xZ_pos, d2xZ_neg, reaches_X, (wave_type, parameter)
 
 
 
-def segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, wavelet_Z=None, wavelet_W=None, add_max_curvature_W=False, plot=False):
+def segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, wavelet_Z=None, wavelet_W=None, add_max_curvature_W=False, 
+                          min_length=None, plot=False):
     '''
     Segmentation of a given signal, this time using the descriptor W alongside with Z. The signal is first filtered using a continuous wavelet decomposition 
     (the wavelet is chosen automatically), then reconstructed. Its curvature is calculated at every abscissa, 
@@ -234,6 +282,8 @@ def segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, wavelet_Z=None, wavelet_W=N
         points where the the initial signal [X, Z] has a negative curvature.
 
     '''
+    
+    # TODO remove Ah and Zb from arguments
     
     pas = np.nanmean(np.diff(X))
     
@@ -404,44 +454,52 @@ def segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, wavelet_Z=None, wavelet_W=N
             if (d2xZ_f[i]*d2xZ_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZpWp[i], X_ZnWp[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
             elif (d2xW_f[i]*d2xW_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZpWp[i], X_ZpWn[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
-            X_inflexion += [x_inf]
-            Z_inflexion += [z_inf]
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
     
     for i in range(0, len(X_ZpWn)-1):
         if (np.isfinite(X_ZpWn[i]) & np.isnan(X_ZpWn[i+1])):
             if (d2xZ_f[i]*d2xZ_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZpWn[i], X_ZnWn[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
             elif (d2xW_f[i]*d2xW_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZpWn[i], X_ZpWp[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
-            X_inflexion += [x_inf]
-            Z_inflexion += [z_inf]
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
     
     for i in range(0, len(X_ZnWp)-1):
         if (np.isfinite(X_ZnWp[i]) & np.isnan(X_ZnWp[i+1])):
             if (d2xZ_f[i]*d2xZ_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZnWp[i], X_ZpWp[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
             elif (d2xW_f[i]*d2xW_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZnWp[i], X_ZnWn[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
-            X_inflexion += [x_inf]
-            Z_inflexion += [z_inf]
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
     
     for i in range(0, len(X_ZnWn)-1):
         if (np.isfinite(X_ZnWn[i]) & np.isnan(X_ZnWn[i+1])):
             if (d2xZ_f[i]*d2xZ_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZnWn[i], X_ZpWn[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
             elif (d2xW_f[i]*d2xW_f[i+1] < 0):
                 x_inf = np.interp(0, [d2xZ_f[i], d2xZ_f[i+1]], [X_ZnWn[i], X_ZnWp[i+1]])
                 z_inf = np.interp(x_inf, X, Z)
-            X_inflexion += [x_inf]
-            Z_inflexion += [z_inf]
+                X_inflexion.append(x_inf)
+                Z_inflexion.append(z_inf)
     
     X_inflexion = np.asarray(X_inflexion)
     Z_inflexion = np.asarray(Z_inflexion)
@@ -475,6 +533,14 @@ def segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, wavelet_Z=None, wavelet_W=N
     seg1_no_nan = seg1_no_nan.astype("int")
     reaches_X = np.take(X, seg1_no_nan)
     reach_lengths = np.diff(reaches_X)
+    
+    if min_length is not None and len(reach_lengths) > 1:
+        if (np.any(reach_lengths < min_length)):
+            indices_to_remove = np.ravel(np.argwhere(reach_lengths < min_length))
+            if indices_to_remove[0] == 0:
+                indices_to_remove[0] = 1
+            reaches_X = np.delete(reaches_X, indices_to_remove)
+    
     print("- lambda_c : %f" % lambda_c)
     #print(selected_X)
     print("  - reaches count : %i" % len(reach_lengths))
@@ -516,7 +582,7 @@ def segmentation_advanced(X, Z, Zb, W, Ah, lambda_c, wavelet_Z=None, wavelet_W=N
         plt.title(r"Distribution of reach lengths after segmentation with $\lambda_c = $" + str(lambda_c) + " m")
         plt.show()
     
-    return d2xZ_ZpWp, d2xZ_ZpWn, d2xZ_ZnWp, d2xZ_ZnWn, (wave_type, parameter), (wave_type_W, parameter_W)
+    return d2xZ_ZpWp, d2xZ_ZpWn, d2xZ_ZnWp, d2xZ_ZnWn, reaches_X, (wave_type, parameter), (wave_type_W, parameter_W)
 
 
 
