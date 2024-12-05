@@ -6,8 +6,8 @@ Created on Mon Nov 15 14:12:59 2021
 @author: joao
 """
 
-import pywt
-import pycwt
+# import pywt
+# import pycwt
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
